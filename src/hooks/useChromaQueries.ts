@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ConnectionProfile, SearchDocumentsParams, UpdateDocumentParams, CreateDocumentParams, DeleteDocumentsParams, CreateDocumentsBatchParams, CreateCollectionParams } from '../../electron/types'
 
+function emitActivity(label: string, durationMs?: number, status: 'ok' | 'error' = 'ok') {
+  window.dispatchEvent(new CustomEvent('chroma:activity', { detail: { label, durationMs, status } }))
+}
+
 // Query Keys
 export const chromaQueryKeys = {
   all: ['chroma'] as const,
@@ -57,9 +61,18 @@ export function useDocumentsQuery(
         throw new Error('Profile ID is required')
       }
       const startTime = performance.now()
-      const documents = await window.electronAPI.chromadb.searchDocuments(profileId, params)
-      const fetchTimeMs = Math.round(performance.now() - startTime)
-      return { documents, fetchTimeMs }
+      try {
+        const documents = await window.electronAPI.chromadb.searchDocuments(profileId, params)
+        const fetchTimeMs = Math.round(performance.now() - startTime)
+        const label = params.queryText
+          ? `search "${params.queryText}" → ${documents.length} docs`
+          : `list → ${documents.length} docs`
+        emitActivity(label, fetchTimeMs)
+        return { documents, fetchTimeMs }
+      } catch (error) {
+        emitActivity('search failed', Math.round(performance.now() - startTime), 'error')
+        throw error
+      }
     },
     enabled: enabled && !!profileId && !!params.collectionName,
     staleTime: 1000 * 15, // 15 seconds
@@ -106,10 +119,9 @@ export function useUpdateDocumentMutation(profileId: string, collectionName: str
 
   return useMutation({
     mutationFn: async (params: Omit<UpdateDocumentParams, 'collectionName'>) => {
-      await window.electronAPI.chromadb.updateDocument(profileId, {
-        collectionName,
-        ...params,
-      })
+      const start = performance.now()
+      await window.electronAPI.chromadb.updateDocument(profileId, { collectionName, ...params })
+      emitActivity('update document', Math.round(performance.now() - start))
     },
     onSuccess: () => {
       // Invalidate all document queries for this collection to refetch updated data
@@ -136,10 +148,9 @@ export function useCreateDocumentMutation(profileId: string, collectionName: str
 
   return useMutation({
     mutationFn: async (params: Omit<CreateDocumentParams, 'collectionName'>) => {
-      await window.electronAPI.chromadb.createDocument(profileId, {
-        collectionName,
-        ...params,
-      })
+      const start = performance.now()
+      await window.electronAPI.chromadb.createDocument(profileId, { collectionName, ...params })
+      emitActivity('create document', Math.round(performance.now() - start))
     },
     onSuccess: () => {
       // Invalidate all document queries for this collection to refetch with new document
@@ -170,10 +181,9 @@ export function useDeleteDocumentsMutation(profileId: string, collectionName: st
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      await window.electronAPI.chromadb.deleteDocuments(profileId, {
-        collectionName,
-        ids,
-      })
+      const start = performance.now()
+      await window.electronAPI.chromadb.deleteDocuments(profileId, { collectionName, ids })
+      emitActivity(`delete ${ids.length} doc${ids.length !== 1 ? 's' : ''}`, Math.round(performance.now() - start))
     },
     onSuccess: () => {
       // Invalidate all document queries for this collection to refetch after deletion
@@ -204,10 +214,11 @@ export function useCreateDocumentsBatchMutation(profileId: string, collectionNam
 
   return useMutation({
     mutationFn: async (params: Omit<CreateDocumentsBatchParams, 'collectionName'>) => {
-      return await window.electronAPI.chromadb.createDocumentsBatch(profileId, {
-        collectionName,
-        ...params,
-      })
+      const start = performance.now()
+      const result = await window.electronAPI.chromadb.createDocumentsBatch(profileId, { collectionName, ...params })
+      const count = params.documents?.length ?? 0
+      emitActivity(`import ${count} doc${count !== 1 ? 's' : ''}`, Math.round(performance.now() - start))
+      return result
     },
     onSuccess: () => {
       // Invalidate all document queries for this collection to refetch with new documents
@@ -238,7 +249,10 @@ export function useCreateCollectionMutation(profileId: string) {
 
   return useMutation({
     mutationFn: async (params: CreateCollectionParams) => {
-      return await window.electronAPI.chromadb.createCollection(profileId, params)
+      const start = performance.now()
+      const result = await window.electronAPI.chromadb.createCollection(profileId, params)
+      emitActivity(`create collection "${params.name}"`, Math.round(performance.now() - start))
+      return result
     },
     onSuccess: () => {
       // Invalidate collections to refetch with new collection
@@ -255,7 +269,9 @@ export function useDeleteCollectionMutation(profileId: string) {
 
   return useMutation({
     mutationFn: async (collectionName: string) => {
+      const start = performance.now()
       await window.electronAPI.chromadb.deleteCollection(profileId, collectionName)
+      emitActivity(`delete collection "${collectionName}"`, Math.round(performance.now() - start))
     },
     onSuccess: () => {
       // Invalidate collections to refetch

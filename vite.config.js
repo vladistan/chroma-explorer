@@ -42,6 +42,7 @@ export default defineConfig({
                 '@chroma-core/sentence-transformer',
                 'onnxruntime-node',
                 'sharp',
+                'parquetjs',
               ],
             },
           },

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
+import { useDebounce } from '../../hooks/useDebounce'
 import { useChromaDB } from '../../providers/ChromaDBProvider'
 import { useDocumentsQuery, useCollectionsQuery, useCreateDocumentMutation, useDeleteDocumentsMutation, useCreateDocumentsBatchMutation, useUpdateDocumentMutation } from '../../hooks/useChromaQueries'
 import { useClipboard } from '../../context/ClipboardContext'
@@ -161,11 +162,13 @@ export default function DocumentsView({
     setDraftError(null)
   }, [collectionName])
 
+  // Debounce the search text so typing doesn't fire a query on every keystroke
+  const liveQueryText = filterRows.find(r => r.type === 'search')?.searchValue?.trim() ?? ''
+  const debouncedQueryText = useDebounce(liveQueryText, 400)
+
   // Build search params from filter rows
   const searchParams = useMemo(() => {
-    // Extract search query from search-type rows
-    const searchRow = filterRows.find(r => r.type === 'search' && r.searchValue?.trim())
-    const queryText = searchRow?.searchValue?.trim() || undefined
+    const queryText = debouncedQueryText || undefined
 
     // Helper to parse filter value based on operator
     const parseFilterValue = (value: string, operator: string): string | number | string[] | number[] => {
@@ -220,7 +223,7 @@ export default function DocumentsView({
       nResults,
       metadataFilter,
     }
-  }, [collectionName, filterRows, nResults])
+  }, [collectionName, filterRows, nResults, debouncedQueryText])
 
   // Use React Query for documents with debouncing via staleTime
   const {
@@ -842,7 +845,14 @@ export default function DocumentsView({
             </div>
           </div>
           <span className="text-xs text-muted-foreground flex-shrink-0">
-            {!loading && !error && `${documents.length} record${documents.length !== 1 ? 's' : ''}`}
+            {!loading && !error && (() => {
+              const shown = documents.length
+              const total = currentCollection?.count
+              if (total != null && shown < total) {
+                return `${shown} of ${total} records`
+              }
+              return `${shown} record${shown !== 1 ? 's' : ''}`
+            })()}
           </span>
         </div>
 

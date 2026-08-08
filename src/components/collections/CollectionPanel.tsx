@@ -8,6 +8,7 @@ import { useDeleteCollectionMutation } from '../../hooks/useChromaQueries'
 import { SHORTCUTS, matchesShortcut } from '../../constants/keyboard-shortcuts'
 import { Button } from '../ui/button'
 import { DeleteCollectionDialog } from './DeleteCollectionDialog'
+import { ActivityLog } from '../layout/ActivityLog'
 
 const inputClassName = "w-full h-6 text-[11px] py-0 px-1.5 pr-5 rounded-md bg-black/[0.04] dark:bg-white/[0.06] placeholder:text-sidebar-foreground/50 text-sidebar-foreground focus:outline-none focus:ring-1 focus:ring-sidebar-ring/50 transition-colors"
 const inputStyle = { boxShadow: 'inset 0 0.5px 1px 0 rgb(0 0 0 / 0.04)' }
@@ -363,6 +364,8 @@ export function CollectionPanel() {
           </div>
         )}
       </div>
+
+      <ActivityLog />
 
       {/* Footer - only shown when in deletion mode */}
       {markedForDeletion && !draftCollection && (
